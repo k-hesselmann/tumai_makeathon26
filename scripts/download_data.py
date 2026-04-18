@@ -46,6 +46,12 @@ def download_s3_folder(bucket_name: str, folder_name: str, local_dir: str = "./d
                 if key.endswith("/") or key == prefix:
                     logger.debug(f"Skipping directory placeholder: {key}")
                     continue
+
+                # Skip files that are already fully downloaded
+                if target.exists() and target.stat().st_size == obj["Size"]:
+                    logger.debug(f"Already exists, skipping: {target}")
+                    continue
+
                 # Create directories if needed
                 target.parent.mkdir(parents=True, exist_ok=True)
 
