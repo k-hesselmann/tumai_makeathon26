@@ -1,0 +1,344 @@
+=== alphaearth_workshop.ipynb ===
+# Setup
+
+# Core Library
+_Run all cells in this section before proceeding. Collapse the section header to hide implementation details._
+
+### Imports, constants & data structures
+
+### Embedding dequantization
+
+### Map visualisation helpers
+
+### Embedding visualisation
+
+### Annotation & tile management
+
+### Feature extraction
+
+### Dimensionality reduction
+
+### Persistence & evaluation utilities
+
+### SVM pipeline
+
+### MLP pipeline
+
+# AlphaEarth Foundations (AEF)
+
+![headline_aef.png](https://drive.google.com/uc?export=view&id=1Pl5R6vMVgX0WbahNAR_Khlg7LvZ6ov7e)
+
+*Source: Brown, C. F., Kazmierski, M. R., ... arXiv:2507.22291.*
+https://arxiv.org/pdf/2507.22291
+
+AlphaEarth Foundations (AEF) models Earth system dynamics by encoding multi-source spatiotemporal inputs—$N_i$ frames with $C_i$ channels across modalities $i \in M_E$ and timestamps $t_j$—into a unified representation over a chosen time interval.
+
+Given a valid period $[t_s, t_e)$ with $t_s < t_e$, AEF produces a compact embedding $A(t_s, t_e)$ that summarizes the temporal behavior of the system. Embeddings we'll be working with today has been generated for 2022, i.e  $t_s = 01.01.2022$, $t_e = 31.12.2022$. Note that $t_s$ and $t_e$ are arbitrary inputs to the model, thereby allowing the AEF to operate over arbitrary temporal ranges.
+
+
+The embedding $A \in \mathbb{R}^{64}$ is a fixed-size (64-dimensions) representation capturing the temporal trajectory of key variables across heterogeneous data sources.
+
+By incorporating an explicit term in the loss function (cf. “Batch Uniformity” in the referenced work), the learned embeddings are encouraged to lie on the unit hypersphere. Consequently, each embedding vector $A$ resides approximately in   $\mathbb{S}^{63}$ (Section E on the image)
+
+
+# Let's visualize Embeddings
+
+### What do these dimensions mean?
+
+
+| Exclusive Embedding Dimension | Associated Land Cover Class | Distinctive Trait |
+|------------------------------|----------------------------|------------------|
+| A09, A35 | Built-up | Urban surfaces and infrastructure (roofs, roads, concrete). Radiometric signature dominated by artificial materials with high SWIR reflectance compared to NIR and strong Sentinel-1 backscatter. Unique combination of angular geometry and artificial-material spectrum. |
+| A12, A50 | Cropland | Annual crops with regular phenology (clear greenness peaks), geometric patterns (plots, furrows), and intensive management. Certain homogeneous or irrigated crop signatures are unique to cropland. |
+| A05, A27 | Mangroves | Evergreen vegetation in intertidal zones. Dense canopy combined with coastal linear patterns, water between crowns, and specific NIR/SWIR signatures due to waterlogging. Unique mix of forest, water, and coastal context. |
+| A04, A11, A25, A29 | Herbaceous wetland | Herbaceous vegetation with permanent or regular flooding. Combines moderate–high NDVI with high water indices and floodplain textures. Unique combination of vegetation and long-term flooding. |
+| A18, A21, A26 | Shrubland | Natural shrubs (≥10% cover), often in semi-arid regions. Distinct subtypes with specific height, density, and spatial patterns (e.g., Mediterranean shrublands) forming unique signatures. |
+| A16, A23 | Tree cover | Tree-dominated regions (≥10% cover), including plantations. High NIR, strong shadows, closed canopy textures, and persistent phenology distinguish them from shrubs and grasslands. |
+| A41 | Grassland | Herbaceous vegetation (≥10% cover) without dominant woody stems. Seasonal but structurally homogeneous, lacking flooding or geometric patterns seen in wetlands or cropland. |
+| A44, A57 | Moss/lichen | Moss- and lichen-dominated surfaces in tundra or arid rocky areas. Low structure, moderate NDVI, and fine textures over rock or soil distinguish them from taller vegetation. |
+| A63 | Bare/sparse vegetation | Soil, sand, or rock with <10% vegetation year-round. High VIS/SWIR reflectance, minimal chlorophyll signal, and little temporal variation. |
+| A64 | Permanent water bodies | Water present ≥9 months/year. Strong absorption in NIR/SWIR, smooth texture, and distinct geometry (rivers, lakes). Unique near-zero reflectance signature. |
+
+*Source: https://arxiv.org/abs/2603.16911*
+
+Usage
+- Use the sliders to pick any three of the 64 embedding dimensions as R, G, B channels and see what the tile looks like.  Press **Random channels** to explore random combinations.
+
+- You can also switch to Grayscale mode and do the same with only 1 channel.
+- Axy denotes dimension xy. For instance, A35 denotes 35-th dimension
+
+# Let's visualize labels
+
+**Note:** The basemap (satellite imagery) is not temporally aligned with the annotations. Consequently, the ground truth labels may not correspond to the visual content of the imagery. The annotations were generated for the year 2022, whereas the displayed basemap reflects the most recent available imagery.
+
+
+# Low Dimensional Analysis
+
+We reduce the 64-dimensional AEF embeddings of every annotated pixel to 2D using **PCA** (linear) and **UMAP** (non-linear) and plot them side-by-side.
+
+If the embeddings are meaningful, pixels from the same land-cover class should cluster together — well before any classifier is trained.
+
+# Support Vector Machines: High-dimensional hyperplane for classification
+
+Mapping data to lower dimensions is a powerful tool for **visualisation and clustering** — but what if we could classify the embeddings directly in the original **64-dimensional space**, without any reduction?
+
+## The Hyperplane
+
+A **Support Vector Machine** (SVM) finds the hyperplane that separates two classes with the largest possible margin. For a sample $\mathbf{x} \in \mathbb{R}^{64}$, the decision boundary is:
+
+$$\mathbf{w}^\top \mathbf{x} + b = 0, \qquad \mathbf{w} \in \mathbb{R}^{64}$$
+
+The SVM selects $\mathbf{w}$ and $b$ by solving the following optimisation, which maximises the margin $\tfrac{2}{\|\mathbf{w}\|}$ between the two class boundaries:
+
+$$\min_{\mathbf{w},\, b}\; \frac{1}{2}\|\mathbf{w}\|^2 \quad \text{subject to} \quad y_i\!\left(\mathbf{w}^\top \mathbf{x}_i + b\right) \geq 1 \;\; \forall\, i$$
+
+A new sample is then classified by:
+
+$$\hat{y} = \operatorname{sign}\!\left(\mathbf{w}^\top \mathbf{x} + b\right)$$
+
+---
+
+Hyperplanes assume that the data is **linearly separable** in the feature space. Complex real-world data, however, often lives on a **non-linear manifold** — meaning no single straight cut can cleanly separate all classes. What if we could learn the non-linearities in the data?
+
+# Multi-layer Perceptron: Learning non-linearity
+
+A **Multi-Layer Perceptron** (MLP) overcomes the linear limitation of SVMs by stacking layers of learned transformations, each followed by a non-linear activation function. For our architecture with hidden layers $(128,\, 64,\, 32)$, each layer $l$ computes:
+
+$$\mathbf{h}^{(l)} = \operatorname{ReLU}\!\left(\mathbf{W}^{(l)}\,\mathbf{h}^{(l-1)} + \mathbf{b}^{(l)}\right), \qquad \operatorname{ReLU}(x) = \max(0,\, x)$$
+
+The full network composes four transformations: $\mathbb{R}^{64} \to \mathbb{R}^{128} \to \mathbb{R}^{64} \to \mathbb{R}^{32} \to \mathbb{R}^2$. The ReLU activations introduce non-linearity at every layer, enabling the MLP to approximate arbitrarily complex decision boundaries — something a linear hyperplane fundamentally cannot do. The parameters $\mathbf{W}^{(l)},\, \mathbf{b}^{(l)}$ are optimised end-to-end via **backpropagation** using the Adam optimiser, with early stopping on validation forest F1.
+
+
+> Even though the MLP was able to learn non-linearities in the data, we only achieved **84% precision at 86% recall**. What could be the issue?
+
+# Join Colab: https://bit.ly/4cfvFJi
+
+# Challenge: Automate wrong-label detection
+
+Our model performs well — but not perfectly. Part of the remaining error may not be the model's fault: **some annotation polygons in the test tile carry incorrect class labels**.
+
+Your challenge is to design an algorithm that **automatically identifies likely mislabelled polygons** — without manually inspecting them one by one, and without hand-picking them by looking at the labels. As a bonus, extend your solution to **suggest the most probable correct label** for each flagged polygon.
+
+- **The basemap shown in the visualisations does not correspond to the time period for which the labels were created** — visual inspection of current satellite imagery is not reliable ground truth
+
+This is an open problem with no single correct solution.
+
+=== challenge (1).ipynb ===
+# osapiens Challenge Makeathon 2026 — Detecting Deforestation from Space
+
+---
+
+## Table of Contents
+
+1. Data Download / Structure / Setup
+2. Challenge: Detecting Deforestation from Space
+3. Definition of Deforestation
+4. Data Description & Visualisation
+   - 4.1 Sentinel-2
+   - 4.2 Sentinel-1
+   - 4.3 AlphaEarth Foundations
+5. Labels Description & Visualisation
+   - 5.1 RADD Alert Labels
+   - 5.2 GLAD-L Alert Labels
+   - 5.3 GLAD-S2 Alert Labels
+6. Submission
+   - 6.1 Example: using `submission_utils.py`
+7. Helpful Resources
+
+## 1 — Data Download / Structure / Setup
+
+> run `make download_data_from_s3` from your terminal to download data
+
+After downloading, the dataset lives under `data/makeathon-challenge/` and is split into `train` and `test` sets across four top-level folders.
+
+```
+data/makeathon-challenge/
+├── sentinel-1/
+│   ├── train/{tile_id}__s1_rtc/{tile_id}__s1_rtc_{year}_{month}_{ascending|descending}.tif
+│   └── test/  ...
+├── sentinel-2/
+│   ├── train/{tile_id}__s2_l2a/{tile_id}__s2_l2a_{year}_{month}.tif
+│   └── test/  ...
+├── aef-embeddings/
+│   ├── train/{tile_id}_{year}.tiff
+│   └── test/  ...
+├── labels/train/
+│   ├── gladl/   gladl_{tile_id}_alert{YY}.tif  +  gladl_{tile_id}_alertDate{YY}.tif
+│   ├── glads2/  glads2_{tile_id}_alert.tif     +  glads2_{tile_id}_alertDate.tif
+│   └── radd/    radd_{tile_id}_labels.tif
+└── metadata/
+    ├── train_tiles.geojson
+    └── test_tiles.geojson
+```
+
+Each tile is identified by an ID of the form `{MGRS_grid}_{x}_{y}` (e.g. `18NWG_6_6`), encoding its position within a Military Grid Reference System tile. Sentinel-1 and Sentinel-2 are monthly time series; AlphaEarth embeddings are annual. Labels are only provided for the training set — the test set is used exclusively for leaderboard evaluation. Spatial coverage of all tiles is documented in the two GeoJSON files under `metadata/`.
+
+**We want to emphasize that you are not required to use these specific data sources or labels in your solution.** You are free to incorporate any additional data sources or labels you find useful, as long as your final submission follows the required format and contains predictions only for the test set tiles. More on submission format in section 6.
+
+## 2 — Challenge: Detecting Deforestation from Space
+
+![deforestation](content/deforestation.png)
+> The picture above shows a deforestation event in the Cerrado Region, Brazil captured by Sentinel-2 in September 2020.
+
+As global deforestation continues, the EU Deforestation Regulation (EUDR) is driving demand for large-scale geospatial monitoring by requiring companies to verify that their supply chains are deforestation-free.
+
+Satellite constellations monitor Earth at global scale using optical and radar sensors—but turning this data into reliable insights is difficult.
+
+Satellite data is noisy, heterogeneous, and varies across sensors, regions, and environmental conditions.
+
+As a result, deforestation detection systems often lack accuracy and generalization.
+
+Building systems that can turn these imperfect signals into reliable, automated, and globally consistent evidence remains an open problem and the focus of this challenge.
+
+
+
+## 3 — Definition of Deforestation
+
+For this challenge, we focus exclusively on deforestation events occurring after 2020. Deforestation is defined as the permanent removal of tree cover, leading to a transition from forest to non-forest land. Accordingly, an event is only considered deforestation after 2020 if the area was forest in 2020.
+
+## 4 — Data Description & Visualisation
+
+In this challenge we have 3 data modalities (Sentinel-2, Sentinel-1, and AlphaEarth Foundations) and 3 weak-label sources (RADD, GLAD-L, and GLAD-S2). Each has different characteristics, strengths, and limitations. Understanding these is crucial for building effective models. In the sections below, we provide an overview of each data source, along with code snippets to load and visualize the data.
+
+### 4.1 — Sentinel-2
+
+Each pixel in the Sentinel-2 data contains 12 spectral bands, each capturing reflectance at different wavelengths. These bands provide complementary information about land cover, vegetation health, soil properties, and atmospheric conditions. Below is a summary of the Sentinel-2 bands included in the dataset:
+
+| Band | Name / Type | Resolution (m/px) | Central Wavelength (nm) | Bandwidth (nm) | Description / Use |
+|------|------------|-------------------|--------------------------|----------------|-------------------|
+| B01 | Aerosol | 60 | 443 | 20 | Aerosol detection |
+| B02 | Blue | 10 | 490 | 65 | Soil & vegetation discrimination, forest mapping, detects man-made features |
+| B03 | Green | 10 | 560 | 35 | Water clarity contrast, vegetation reflectance, highlights oil |
+| B04 | Red | 10 | 665 | 30 | Vegetation, soil, urban areas, strong reflection from dead foliage |
+| B05 | Red Edge | 20 | 705 | 15 | Vegetation classification |
+| B06 | Red Edge | 20 | 740 | 15 | Vegetation classification |
+| B07 | Red Edge | 20 | 783 | 20 | Vegetation classification |
+| B08 | NIR | 10 | 842 | 115 | Biomass, vegetation analysis, shoreline mapping |
+| B8A | Narrow NIR | 20 | 865 | 20 | Vegetation classification |
+| B09 | Water Vapour | 60 | 945 | 20 | Water vapour detection |
+| B10 | Cirrus | 60 | 1375 | 30 | Cirrus cloud detection |
+| B11 | SWIR 1 | 20 | 1610 | 90 | Moisture content, vegetation contrast, snow vs cloud differentiation |
+| B12 | SWIR 2 | 20 | 2190 | 180 | Moisture content, vegetation contrast, snow vs cloud differentiation |
+
+Source: https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-2/bands/
+
+All bands are provided in a single multi-band `.tif` file and are upsampled to 10m resolution for consistency. The data is delivered in a local UTM projected CRS. Observations are not mosaicked and represent the single best cloud-free scene for a given month. When combining with other rasters (e.g. labels), ensure all files are reprojected to the same CRS to guarantee proper alignment.
+
+### 4.2 — Sentinel-1
+
+Sentinel-1 is a radar satellite that provides all-weather (can penetrate clouds), day-and-night imaging capabilities. It captures the Earth's surface using microwave signals, which are reflected back to the satellite. The dataset includes 1 radar backscatter channel with VV polarisation. You can read more about Sentinel-1 Mission here: https://sentiwiki.copernicus.eu/web/s1-mission
+
+Sentinel-1 data is available at multiple processing levels. For this challenge, we provide the highest standard: **Radiometrically Terrain Corrected (RTC)** product. Measurements have been preprocessed to correct for terrain-induced distortions and radiometric effects, making them ready for direct analysis and modeling.
+
+The data is delivered in a local UTM projected coordinate reference system (CRS), aligned with Sentinel-2. When combining these data with other rasters (e.g., labels), ensure that all datasets are reprojected to the same CRS to guarantee proper spatial alignment.
+
+
+### 4.3 — AlphaEarth Foundations (EPSG:4326)
+
+AlphaEarth Foundations is a global dataset of pre-trained embeddings derived from multiple satellite data sources, including Sentinel-2 and Sentinel-1. These embeddings are designed to capture rich spatio-temporal patterns in the data, providing a powerful representation for downstream tasks like deforestation detection.
+
+The dataset is organized into tiles that cover the same spatial extent as the Sentinel-2 and Sentinel-1 data, but is delivered in a geodetic coordinate reference system (CRS) of EPSG:4326 (WGS-84). This means that the pixel coordinates are defined in terms of latitude and longitude, rather than projected coordinates like UTM. When using the AlphaEarth Foundations embeddings in conjunction with the Sentinel-2 and Sentinel-1 data, it is crucial to reproject the embeddings to the same CRS (local UTM) to ensure proper spatial alignment before modeling. This can be done using geospatial libraries such as `rasterio` or `GDAL`, which allow for efficient reprojection of raster data while preserving the integrity of the embeddings.
+
+
+Paper: https://arxiv.org/abs/2507.22291
+
+
+## 5 — Labels Description and Encodings
+
+The challenge includes three sources of weak\* labels for deforestation: RADD, GLAD-L, and GLAD-S2. Each label source has different characteristics, strengths, and limitations. Below we provide an overview of each label type, along with code snippets to load and visualize the labels.
+
+\*By weak labels, we mean that these are not perfect ground truth (predictions in fact), but rather noisy indicators of deforestation events. They can be used for training and evaluation, but it's important to understand their limitations and potential biases when interpreting model performance.
+
+
+### 5.1 — RADD (Radar for Detecting Deforestation) Alert Labels
+
+RADD is a state-of-the-art deforestation detection system that uses Sentinel-1 radar data to identify deforestation events. RADD generates binary alert masks indicating areas of potential deforestation, along with confidence scores for each alert.
+
+We provide the alerts in it's rawest form meaning there was no post-processing was done from our side.
+
+Here is everything you should know to understand the RADD labels:
+
+Source files:
+
+- one raw tile TIFF per dataset tile
+
+Encoding:
+
+- one integer encodes both confidence and alert date
+- leading digit:
+    - `2` = low confidence
+    - `3` = high confidence
+- remaining digits:
+    - number of days since `2014-12-31`
+- `0` = no alert
+
+Examples:
+
+- `20001` = low-confidence alert on `2015-01-01`
+- `30055` = high-confidence alert on `2015-02-24`
+- `21847` = low-confidence alert on `2020-01-21`
+
+
+### 5.2 — GLAD-L (Global Land Analysis & Discovery — Landsat) Alert Labels
+
+GLAD-L is a deforestation alert system that uses Landsat optical data to identify potential deforestation events. Similar to RADD, GLAD-L generates binary alert masks and alert-date rasters, but with different confidence encoding and known limitations.
+
+Here is everything you should know to understand the GLAD-L labels:
+
+Source files:
+
+- `alertYY.tif`
+- `alertDateYY.tif`
+
+Examples:
+
+- `alert24.tif`
+- `alertDate24.tif`
+
+Encoding:
+
+- `alertYY` is a raw yearly alert raster, usually `uint8`
+    - `0` = no loss
+    - `2` = probable loss
+    - `3` = confirmed loss
+- `alertDateYY` is a raw yearly alert-date raster, usually `uint16`
+    - value = day-of-year within year `20YY`
+    - `0` = no alert
+
+### 5.3 — GLAD-S2 (Global Land Analysis & Discovery — Sentinel-2) Alert Labels
+
+GLAD-S2 is a deforestation alert system that uses Sentinel-2 optical data to identify potential deforestation events. It provides similar outputs to GLAD-L, but with different confidence encoding and known limitations.
+
+Here is everything you should know to understand the GLAD-S2 labels:
+
+Source files:
+
+- `alert.tif`
+- `alertDate.tif`
+
+Encoding:
+
+- `alert` is a raw confidence raster, usually `uint8`
+    - `0` = no loss
+    - `1` = loss detected only in the most recent observation
+    - `2` = low confidence loss
+    - `3` = medium confidence loss
+    - `4` = high confidence loss
+- `alertDate` is a raw day-offset raster, usually `uint16`
+    - value = number of days since `2019-01-01`
+    - `0` = no alert
+
+*Note*: Compared to GLAD-L, GLAD-S2 includes all years in a single raster that is why YY is not included in the file names.
+
+## 6 — Submission
+
+
+### 6.1 — Example: using `submission_utils.py`
+
+> Walk-through of how to convert a binary prediction raster into the submittable format using the provided utility script.
+
+## 7 — Helpful Resources
+
+- QGIS for desktop visualization of the rasters (.tif files) or polygons (.geojson files)
+- Python libraries: Geopandas (vector data), Rasterio (raster data)
+

@@ -1,48 +1,87 @@
 # Deforestation Detection Hackathon
 
-Deforestation detection hackathon project to identify post-2020 deforestation using multimodal satellite imagery (Sentinel-1 SAR, Sentinel-2 Optical) and 64-dimensional foundation model embeddings.
+Detect post-2020 deforestation using multimodal satellite imagery (Sentinel-1 SAR, Sentinel-2 Optical) and 64-dimensional AlphaEarth foundation model embeddings.
 
 ## Setup
 
-Ensure everyone is using the exact same environment to avoid library conflicts.
-
 ```bash
 python -m venv venv
-# On Windows:
-.\venv\Scripts\activate
-# On Linux/Mac:
-source venv/bin/activate
-
+# Windows: .\venv\Scripts\activate
+# Linux/Mac: source venv/bin/activate
 pip install -r requirements.txt
 ```
 
 ## Data
 
-Place the downloaded dataset into the `./data/makeathon-challenge/` directory as configured in `config.py`. The directory structure should look like this:
+```bash
+python scripts/download_data.py
+```
+
+Expected layout (paths configured in `config.py`):
 
 ```text
 data/makeathon-challenge/
-  ├── sentinel-1/
-  ├── sentinel-2/
-  ├── aef-embeddings/
-  ├── labels/
-  └── metadata/
+  ├── sentinel-2/       # Optical, 12 bands, monthly, UTM
+  ├── sentinel-1/       # Radar, VV polarisation, monthly, UTM
+  ├── aef-embeddings/   # AlphaEarth 64-dim, annual, EPSG:4326 (needs reprojection!)
+  ├── labels/           # RADD + GLAD-L + GLAD-S2 weak labels (train only)
+  └── metadata/         # train_tiles.geojson, test_tiles.geojson
 ```
 
-## File Ownership Table
+## Pipeline
 
-| File                | Owner    | Description                                                                                              |
-| ------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
-| `config.py`         | Person 1 | Shared configuration, do not edit without telling everyone                                               |
-| `p1_loader.py`      | Person 1 | Data loading. **Crucial:** Resize 64D embeddings to match Sentinel resolution using `scipy.ndimage.zoom` |
-| `p2_fuse_labels.py` | Person 2 | Label fusion logic. Fuses RADD, GLAD-L, GLAD-S2 into a single clean binary label per tile                |
-| `p3_detect.py`      | Person 3 | NDVI Change Detection. Detects deforestation by finding NDVI drops after 2020                            |
-| `p4_sentinel1.py`   | Person 4 | Sentinel-1 Radar Confidence Layer + Visualisation                                                        |
+```text
+┌──────────────────┐     ┌──────────────────┐
+│  fuse_labels.py  │     │ ndvi_features.py │
+│  RADD+GLAD →     │     │ NDVI drop map    │
+│  binary mask     │     │ (optional extra) │
+└────────┬─────────┘     └────────┬─────────┘
+         │                        │
+         ▼                        ▼  (optional)
+┌────────────────────────────────────────────┐
+│           build_dataset.py                 │
+│  AEF embeddings + fused labels             │
+│   → outputs/X_train.npy  (N, 64)           │
+│   → outputs/y_train.npy  (N,)              │
+└────────────────────┬───────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────┐
+│            Classifier (MLP)                │
+│  Train on X_train / y_train                │
+│  → predict on test tiles → submission      │
+└────────────────────────────────────────────┘
+```
+
+## Repository Structure
+
+### Core pipeline
+
+| File               | Purpose                                                               |
+| ------------------ | --------------------------------------------------------------------- |
+| `config.py`        | All shared paths and constants. **Do not edit without telling team.** |
+| `loader.py`        | Load Sentinel-2, Sentinel-1, and AEF data. Handles CRS reprojection.  |
+| `fuse_labels.py`   | Majority-vote fusion of 3 weak label sources → clean binary mask.     |
+| `build_dataset.py` | Assembles AEF + fused labels → `X_train.npy` / `y_train.npy`.         |
+
+### Feature extraction (optional extras for the classifier)
+
+| File                | Purpose                                                               |
+| ------------------- | --------------------------------------------------------------------- |
+| `ndvi_features.py`  | NDVI change detection — baseline (2020) vs recent vegetation drop.    |
+| `radar_features.py` | Sentinel-1 radar confidence layer (stub — implement if time permits). |
+
+### Auxiliary
+
+| File / Dir                 | Purpose                    |
+| -------------------------- | -------------------------- |
+| `scripts/download_data.py` | One-time S3 data download. |
+| `requirements.txt`         | Python dependencies.       |
 
 ## Important Rules
 
-- **NEVER** commit the `data/` folder. Ensure it is in `.gitignore`.
+- **NEVER** commit `data/` or `outputs/`. They are in `.gitignore`.
 - **NEVER** hardcode a path. Always import from `config.py`.
-- **NEVER** train on raw, unfiltered weak labels. Always pass them through `p2_fuse_labels.py` first.
-- **NEVER** rely purely on manual NDVI thresholds. The 64D embeddings are the "cheat code" and must be used in the simple MLP/SVM.
-- **NEVER** optimize for Accuracy. The dataset is massively imbalanced; optimize strictly for Precision and Recall.
+- **NEVER** train on raw weak labels. Always use the fused output from `fuse_labels.py`.
+- **NEVER** rely purely on NDVI thresholds. The 64D AEF embeddings are the primary signal.
+- **NEVER** optimize for Accuracy. The dataset is massively imbalanced — use Precision and Recall.
