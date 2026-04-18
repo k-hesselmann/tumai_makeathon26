@@ -1,0 +1,12 @@
+data/
+*.tif
+*.tiff
+*.npy
+*.geojson
+submission/
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+.env
+venv/
+.venv/
