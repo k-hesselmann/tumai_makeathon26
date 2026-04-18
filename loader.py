@@ -52,7 +52,7 @@ def load_s2(tile_id, year, month, data_split="train"):
         — or (None, None) if the file doesn't exist.
     """
     base_dir = S2_TRAIN if data_split == "train" else S2_TEST
-    path = f"{base_dir}/{tile_id}__s2_l2a/{tile_id}__s2_l2a_{year}_{int(month):02d}.tif"
+    path = f"{base_dir}/{tile_id}__s2_l2a/{tile_id}__s2_l2a_{year}_{int(month)}.tif"
     p = pathlib.Path(path)
     if not p.exists():
         print(f"Warning: File does not exist: {path}")
@@ -82,7 +82,7 @@ def load_s1(tile_id, year, month, orbit="ascending", data_split="train"):
         — or (None, None) if the file doesn't exist.
     """
     base_dir = S1_TRAIN if data_split == "train" else S1_TEST
-    path = f"{base_dir}/{tile_id}__s1_rtc/{tile_id}__s1_rtc_{year}_{int(month):02d}_{orbit}.tif"
+    path = f"{base_dir}/{tile_id}__s1_rtc/{tile_id}__s1_rtc_{year}_{int(month)}_{orbit}.tif"
     p = pathlib.Path(path)
     if not p.exists():
         print(f"Warning: File does not exist: {path}")

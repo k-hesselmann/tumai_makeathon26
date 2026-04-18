@@ -2,3 +2,5 @@ rasterio
 numpy
 scipy
 boto3
+geopandas
+shapely
