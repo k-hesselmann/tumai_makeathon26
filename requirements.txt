@@ -5,6 +5,7 @@ boto3
 geopandas
 shapely
 scikit-learn
+lightgbm
 pandas
 matplotlib
 tqdm
