@@ -1,4 +1,4 @@
-# Deforestation Detection — TUM.AI Makeathon 26
+# Deforestation Detection - TUM.AI Makeathon 26
 
 Submission for the [TUM.AI Makeathon 26](https://www.tum-ai.com/) challenge: detect post-2020 tropical deforestation using satellite imagery and machine learning.
 
