@@ -122,6 +122,24 @@ def list_available_months(tile_id, data_split="train"):
     return sorted(months)
 
 
+def _dequantize_aef(raw: np.ndarray) -> np.ndarray:
+    """Convert uint8 AEF raster to float32 using the workshop power-law transform.
+
+    Pixels where all 64 bands are zero are masked/invalid → set to NaN so
+    they are excluded from downstream statistics (nan_to_num clears them later).
+    """
+    out = raw.astype(np.float32)
+    # NaN-mask fully-zero pixels (invalid/padded regions at tile edges)
+    zero_pixel = np.all(out == 0, axis=0, keepdims=True)  # (1, H, W)
+    out = np.where(zero_pixel, np.nan, out)
+    # Sign-preserving power transform: maps uint8 [0,255] → float [-1, 1]^2
+    out = (out - 127.0) / 127.5
+    neg = out < 0
+    out = np.abs(out) ** 2.0
+    out[neg] *= -1.0
+    return out
+
+
 def load_aef(tile_id, year, reference_meta, data_split="train"):
     """
     Load AlphaEarth Foundations embeddings and reproject them to match
@@ -152,9 +170,11 @@ def load_aef(tile_id, year, reference_meta, data_split="train"):
         return None
 
     with rasterio.open(p) as src:
-        source_bands = src.read().astype(np.float32)
+        raw = src.read()  # uint8, (64, H, W)
         source_crs = src.crs
         source_transform = src.transform
+
+    source_bands = _dequantize_aef(raw)  # float32, NaN at masked pixels
 
     dst_crs = reference_meta['crs']
     dst_transform = reference_meta['transform']
@@ -175,6 +195,7 @@ def load_aef(tile_id, year, reference_meta, data_split="train"):
         resampling=Resampling.bilinear,
     )
 
+    np.nan_to_num(dst_bands, nan=0.0, copy=False)
     return dst_bands
 
 

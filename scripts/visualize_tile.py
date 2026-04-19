@@ -29,12 +29,14 @@ from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
 
 from config import (
-    S2_TRAIN, RADD_DIR, GLADL_DIR, GLADS2_DIR, FUSED_LABELS_DIR,
+    S2_TRAIN, RADD_DIR, GLADL_DIR, GLADS2_DIR, FUSED_LABELS_DIR, MODEL1_DIR,
 )
 from loader import load_s2, list_available_months
 
 
 HANSEN_CLIPPED = Path("./data/hansen/clipped")
+MODEL1_PROBS   = Path(MODEL1_DIR) / "forest_probs"
+MODEL1_LABELS  = Path(MODEL1_DIR) / "improved_labels"
 OUTPUT_DIR = Path("./outputs/figures")
 
 
@@ -128,6 +130,18 @@ def load_or_compute_fused(tile_id, labels):
     return fused
 
 
+# ── Model 1 outputs ─────────────────────────────────────────────────────────
+
+def load_forest_prob(tile_id, year):
+    p = MODEL1_PROBS / f"{tile_id}_forest_prob_{year}.tif"
+    return load_label(p)  # float32 [0,1] or None
+
+
+def load_improved_label(tile_id):
+    p = MODEL1_LABELS / f"{tile_id}_improved_label.tif"
+    return load_label(p)  # binary uint8 or None
+
+
 # ── Main figure ──────────────────────────────────────────────────────────────
 
 def generate_figure(tile_id, year, month):
@@ -145,11 +159,16 @@ def generate_figure(tile_id, year, month):
     print("Computing fused mask...")
     fused = load_or_compute_fused(tile_id, labels)
 
-    # ── Build 2x3 figure ─────────────────────────────────────────────────
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12), dpi=150)
+    print("Loading Model 1 outputs...")
+    prob_2020    = load_forest_prob(tile_id, 2020)
+    prob_2023    = load_forest_prob(tile_id, 2023)
+    improved     = load_improved_label(tile_id)
+
+    # ── Build 3x3 figure ─────────────────────────────────────────────────
+    fig, axes = plt.subplots(3, 3, figsize=(18, 18), dpi=150)
     fig.suptitle(
         f"Deforestation Detection Pipeline  --  Tile: {tile_id}",
-        fontsize=16, fontweight="bold", y=0.98,
+        fontsize=16, fontweight="bold", y=0.99,
     )
 
     # Deforestation colormap: transparent for 0, red for 1
@@ -203,7 +222,56 @@ def generate_figure(tile_id, year, month):
         ax.set_title("Fused Labels\n(not computed yet)", fontsize=11)
     ax.axis("off")
 
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    # ── Row 3: Model 1 outputs ────────────────────────────────────────────
+
+    # 7) Forest probability 2020
+    ax = axes[2, 0]
+    if prob_2020 is not None:
+        im = ax.imshow(prob_2020, cmap="Greens", vmin=0, vmax=1)
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        ax.set_title("Model 1: Forest probability 2020\n(WorldCover baseline)", fontsize=11)
+    else:
+        ax.text(0.5, 0.5, "Forest prob 2020\n(not computed yet)",
+                ha="center", va="center", transform=ax.transAxes, fontsize=12)
+        ax.set_facecolor("#1a1a2e")
+        ax.set_title("Model 1: Forest prob 2020", fontsize=11)
+    ax.axis("off")
+
+    # 8) Forest probability 2023
+    ax = axes[2, 1]
+    if prob_2023 is not None:
+        im = ax.imshow(prob_2023, cmap="Greens", vmin=0, vmax=1)
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        ax.set_title("Model 1: Forest probability 2023\n(post-deforestation estimate)", fontsize=11)
+    else:
+        ax.text(0.5, 0.5, "Forest prob 2023\n(not computed yet)",
+                ha="center", va="center", transform=ax.transAxes, fontsize=12)
+        ax.set_facecolor("#1a1a2e")
+        ax.set_title("Model 1: Forest prob 2023", fontsize=11)
+    ax.axis("off")
+
+    # 9) Improved deforestation label overlaid on RGB
+    ax = axes[2, 2]
+    ax.imshow(rgb)
+    if improved is not None:
+        overlay = np.zeros((*improved.shape, 4))
+        overlay[improved == 1] = [0.0, 0.6, 1.0, 0.65]  # blue for Model 1 detections
+        ax.imshow(overlay, interpolation="nearest")
+        n_imp = int(improved.sum())
+        pct = 100.0 * n_imp / improved.size
+        ax.set_title(
+            f"Model 1 Improved Labels on RGB\n(forest 2020 → lost by 2024, {n_imp:,} px, {pct:.1f}%)",
+            fontsize=11,
+        )
+        ax.legend(
+            handles=[Patch(facecolor="#0099FF", alpha=0.65, label="Model 1 deforestation")],
+            loc="lower right", fontsize=9,
+        )
+    else:
+        ax.set_title("Model 1 Improved Labels\n(not computed yet)", fontsize=11)
+    ax.axis("off")
+
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
 
     out_path = OUTPUT_DIR / f"tile_{tile_id}_overview.png"
     fig.savefig(out_path, bbox_inches="tight", facecolor="white")

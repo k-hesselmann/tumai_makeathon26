@@ -4,3 +4,7 @@ scipy
 boto3
 geopandas
 shapely
+scikit-learn
+pandas
+matplotlib
+tqdm

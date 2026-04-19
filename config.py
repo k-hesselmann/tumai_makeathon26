@@ -28,10 +28,14 @@ GLADS2_DIR = f"{LABELS_ROOT}/glads2"   # Sentinel-2-based alerts (all years)
 TRAIN_META = f"{DATA_ROOT}/metadata/train_tiles.geojson"
 TEST_META = f"{DATA_ROOT}/metadata/test_tiles.geojson"
 
+# ── External reference data ─────────────────────────────────────
+WORLDCOVER_DIR = "./data/worldcover"          # ESA WorldCover binary forest masks
+
 # ── Output directories (created automatically) ──────────────────
 FUSED_LABELS_DIR = "./outputs/fused_labels"   # p2_fuse_labels.py writes here
 PREDICTIONS_DIR = "./outputs/predictions"     # p3_detect.py writes here
 SUBMISSION_DIR = "./submission"               # final submission GeoJSON
+MODEL1_DIR = "./outputs/model1"               # Model 1 outputs (improved labels)
 
 # ── Constants ───────────────────────────────────────────────────
 TILE_SIZE = 1002         # pixels per tile edge

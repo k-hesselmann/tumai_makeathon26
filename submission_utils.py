@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Optional, Union
 
 import geopandas as gpd
 import numpy as np
@@ -11,8 +12,8 @@ from shapely.geometry import shape
 
 
 def raster_to_geojson(
-    raster_path: str | Path,
-    output_path: str | Path | None = None,
+    raster_path: "Union[str, Path]",
+    output_path: "Optional[Union[str, Path]]" = None,
     min_area_ha: float = 0.5,
 ) -> dict:
     """Convert a binary deforestation prediction raster to a GeoJSON FeatureCollection.

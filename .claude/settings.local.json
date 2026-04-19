@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python -c \"import torch; print\\(torch.__version__\\); print\\('CUDA:', torch.cuda.is_available\\(\\)\\)\")"
+    ]
+  }
+}
