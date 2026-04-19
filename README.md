@@ -1,6 +1,6 @@
 # Deforestation Detection — TUMAI Makeathon 26
 
-Submission for the [TUMAI Makeathon 26](https://tumai.de) challenge: detect post-2020 tropical deforestation using satellite imagery and machine learning.
+Submission for the [TUMAI Makeathon 26]([https://www.tum-ai.com/]) challenge: detect post-2020 tropical deforestation using satellite imagery and machine learning.
 
 The core idea is to combine multiple noisy, publicly available deforestation alert systems into a high-quality ground truth mask, then train a gradient boosting classifier on 6-year temporal embeddings from the AlphaEarth Foundation (AEF) model — a self-supervised geospatial foundation model producing 64-dimensional patch embeddings per year.
 
