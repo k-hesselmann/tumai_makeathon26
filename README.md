@@ -1,6 +1,10 @@
 # Deforestation Detection — TUMAI Makeathon 26
 
-Detect post-2020 deforestation across the tropics using 6-year AlphaEarth Foundation (AEF) embeddings.
+Submission for the [TUMAI Makeathon 26](https://tumai.de) challenge: detect post-2020 tropical deforestation using satellite imagery and machine learning.
+
+The core idea is to combine multiple noisy, publicly available deforestation alert systems into a high-quality ground truth mask, then train a gradient boosting classifier on 6-year temporal embeddings from the AlphaEarth Foundation (AEF) model — a self-supervised geospatial foundation model producing 64-dimensional patch embeddings per year.
+
+---
 
 ## Pipeline
 
@@ -37,59 +41,71 @@ Detect post-2020 deforestation across the tropics using 6-year AlphaEarth Founda
 ┌───────────────────────────────────────────────────────────────┐
 │  Step 4: detector.ipynb                                       │
 │  ──────────────────────                                       │
-│  LightGBM classifier trained on the 384-dim AEF features.    │
+│  LightGBM classifier trained on the 384-dim AEF features.     │
 │  Runs inference on all test tiles and vectorises predictions  │
-│  into submission/submission.geojson  ← upload this.          │
+│  into submission/submission.geojson.                          │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
+---
 
-**Steps 1, 3 — project venv:**
+## Setup
+
+**Requirements:** Python 3.9+, a GPU-capable conda environment for Step 2 (PyTorch), and a standard venv for everything else.
+
 ```bash
-.\venv\Scripts\activate
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**Step 2 — GPU, use conda:**
+Step 2 (`train_model1.ipynb`) requires PyTorch with CUDA. Use a conda environment with GPU support and open the notebook with that kernel.
+
+---
+
+## Running the Pipeline
+
 ```bash
-conda activate deep_learning
-# Open train_model1.ipynb → Run All
+# Step 1 — fuse weak deforestation labels
+python fuse_labels.py
+
+# Step 2 — train forest classifier (optional, improves label quality)
+# Open train_model1.ipynb and run all cells with a GPU kernel
+
+# Step 3 — build training dataset from AEF embeddings
+python build_dataset.py --labels fused   # or: model1 | combined
+
+# Step 4 — train detector and generate submission
+# Open detector.ipynb and run all cells
+# → submission/submission.geojson
 ```
 
-**Steps 3, 4 — conda env (rasterio):**
-```bash
-C:\Users\khess\anaconda3\envs\deep_learning\python.exe build_dataset.py --labels fused
-# Open detector.ipynb → Run All  →  submission/submission.geojson
-```
+---
 
 ## Label Sources
 
-| Source | Description | Score |
-|---|---|---|
-| `fused` | RADD + GLAD-L + GLAD-S2 + Hansen majority vote | **34%** |
-| `combined` | fused ∪ model1, filtered to confirmed forest pixels | 25% |
+Three label strategies are available via `--labels`:
 
-Use `--labels fused` (best results so far).
+| Strategy   | Description                                                | Leaderboard |
+| ---------- | ---------------------------------------------------------- | ----------- |
+| `fused`    | Majority vote across RADD, GLAD-L, GLAD-S2, Hansen         | **34%**     |
+| `combined` | `fused ∪ model1`, filtered to confirmed 2020 forest pixels | 25%         |
+| `model1`   | Forest classifier output only                              | 17%         |
 
-## Files
+---
 
-| File | Purpose |
-|---|---|
-| `config.py` | All shared paths — do not hardcode paths elsewhere |
-| `fuse_labels.py` | Step 1 — majority-vote label fusion |
-| `train_model1.ipynb` | Step 2 — PyTorch forest classifier (GPU) |
-| `build_dataset.py` | Step 3 — assembles AEF features + labels into .npy |
-| `detector.ipynb` | Step 4 — LightGBM classifier + submission generation |
-| `submission_utils.py` | Vectorises binary prediction rasters to GeoJSON |
-| `loader.py` | Shared raster I/O used by fuse_labels and visualize_tile |
-| `scripts/download_data.py` | One-time S3 data download |
-| `scripts/download_worldcover.py` | One-time WorldCover download (Step 2) |
-| `scripts/visualize_tile.py` | Debug: S2 RGB + labels side-by-side |
+## Repository Structure
 
-## Rules
-
-- **NEVER** commit `data/` or `outputs/` (gitignored)
-- **NEVER** hardcode paths — import from `config.py`
-- **NEVER** use Hansen `lossyear` as a model feature (target leakage)
-- **NEVER** optimise for Accuracy — track F1/Precision/Recall (imbalanced dataset)
+| File                             | Purpose                                                      |
+| -------------------------------- | ------------------------------------------------------------ |
+| `config.py`                      | Central config for all data paths and constants              |
+| `fuse_labels.py`                 | Step 1 — majority-vote label fusion across alert systems     |
+| `train_model1.ipynb`             | Step 2 — PyTorch forest pixel classifier (GPU)               |
+| `build_dataset.py`               | Step 3 — assembles 384-dim AEF features + labels into `.npy` |
+| `detector.ipynb`                 | Step 4 — LightGBM classifier, inference, submission export   |
+| `submission_utils.py`            | Converts binary prediction rasters to GeoJSON polygons       |
+| `loader.py`                      | Shared raster I/O utilities                                  |
+| `scripts/download_data.py`       | One-time download of challenge data from S3                  |
+| `scripts/download_worldcover.py` | One-time download of ESA WorldCover tiles                    |
+| `scripts/visualize_tile.py`      | Generates presentation figures for a given tile              |
